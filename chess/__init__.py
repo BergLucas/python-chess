@@ -3401,7 +3401,7 @@ class Board(BaseBoard):
             from_file = FILE_NAMES.index(match.group(2))
             from_mask &= BB_FILES[from_file]
         if match.group(3):
-            from_rank = int(match.group(3)) - 1
+            from_rank = int(match.group(3))
             from_mask &= BB_RANKS[from_rank]
 
         # Filter by piece type.
