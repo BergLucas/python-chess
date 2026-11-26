@@ -1378,7 +1378,7 @@ class Headers(MutableMapping[str, str]):
         elif "\n" in value or "\r" in value:
             raise ValueError(f"line break in pgn header {key}: {value!r}")
         else:
-            self._others[key] = value
+            self._others[key.strip("_")] = value
 
     def __getitem__(self, key: str) -> str:
         return self._tag_roster[key] if key in TAG_ROSTER else self._others[key]
@@ -2025,7 +2025,7 @@ def read_game(handle: TextIO, *, Visitor: Any = GameBuilder) -> Any:
             # Stop at invalid or malformed headers, ignoring the rest of the line.
             pos = 0
             while tag_match := _TAG_REGEX.match(stripped, pos):
-                tagvalue = tag_match.group(2)
+                tagvalue = tag_match.group(2).replace(" ", "")
                 if "\\" in tagvalue:
                     tagvalue = _TAG_UNESCAPE_REGEX.sub(r"\1", tagvalue)
                 visitor.visit_header(tag_match.group(1), tagvalue)
@@ -2165,9 +2165,9 @@ def read_game(handle: TextIO, *, Visitor: Any = GameBuilder) -> Any:
                 # Found a NAG.
                 visitor.visit_nag(int(token[1:]))
             elif token == "?":
-                visitor.visit_nag(NAG_MISTAKE)
-            elif token == "??":
                 visitor.visit_nag(NAG_BLUNDER)
+            elif token == "??":
+                visitor.visit_nag(NAG_MISTAKE)
             elif token == "!":
                 visitor.visit_nag(NAG_GOOD_MOVE)
             elif token == "!!":

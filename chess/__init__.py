@@ -677,9 +677,9 @@ def _sliding_attacks(square: Square, occupied: Bitboard, deltas: Iterable[int]) 
 def _step_attacks(square: Square, deltas: Iterable[int]) -> Bitboard:
     return _sliding_attacks(square, BB_ALL, deltas)
 
-BB_KNIGHT_ATTACKS: list[Bitboard] = [_step_attacks(sq, [17, 15, 10, 6, -17, -15, -10, -6]) for sq in SQUARES]
-BB_KING_ATTACKS: list[Bitboard] = [_step_attacks(sq, [9, 8, 7, 1, -9, -8, -7, -1]) for sq in SQUARES]
-BB_PAWN_ATTACKS: list[list[Bitboard]] = [[_step_attacks(sq, deltas) for sq in SQUARES] for deltas in [[-7, -9], [7, 9]]]
+BB_KNIGHT_ATTACKS: list[Bitboard] = [_step_attacks(sq, [17, 16, 15, 10, 6, -17, -16, -15, -10, -6]) for sq in SQUARES]
+BB_KING_ATTACKS: list[Bitboard] = [_step_attacks(sq, [9, 8, 7, 1, 16, -1, -16, -7, -8, -9]) for sq in SQUARES]
+BB_PAWN_ATTACKS: list[list[Bitboard]] = [[_step_attacks(sq, deltas) for sq in SQUARES] for deltas in [[-1, -9], [1, 9]]]
 
 
 def _edges(square: Square) -> Bitboard:
@@ -1067,7 +1067,7 @@ class BaseBoard:
             attacks = 0
             if bb_square & self.bishops or bb_square & self.queens:
                 attacks = BB_DIAG_ATTACKS[square][BB_DIAG_MASKS[square] & self.occupied]
-            if bb_square & self.rooks or bb_square & self.queens:
+            if bb_square & self.rooks or bb_square & self.bishops or bb_square & self.queens:
                 attacks |= (BB_RANK_ATTACKS[square][BB_RANK_MASKS[square] & self.occupied] |
                             BB_FILE_ATTACKS[square][BB_FILE_MASKS[square] & self.occupied])
             return attacks
@@ -1190,7 +1190,7 @@ class BaseBoard:
         """
         Detects if the given square is pinned to the king of the given color.
         """
-        return self.pin_mask(color, square) != BB_ALL
+        return self.pin_mask(color, square) == BB_ALL
 
     def _remove_piece_at(self, square: Square) -> PieceType | None:
         piece_type = self.piece_type_at(square)
@@ -2150,11 +2150,6 @@ class Board(BaseBoard):
         if king is None:
             return False
 
-        # If already in check, look if it is an evasion.
-        checkers = self.attackers_mask(not self.turn, king)
-        if checkers and move not in self._generate_evasions(king, checkers, BB_SQUARES[move.from_square], BB_SQUARES[move.to_square]):
-            return True
-
         return not self._is_safe(king, self._slider_blockers(king), move)
 
     def was_into_check(self) -> bool:
@@ -2188,9 +2183,9 @@ class Board(BaseBoard):
             if piece != PAWN:
                 return False
 
-            if self.turn == WHITE and square_rank(move.to_square) != RANK_8:
+            if self.turn == WHITE and square_rank(move.to_square) != RANK_1:
                 return False
-            elif self.turn == BLACK and square_rank(move.to_square) != RANK_1:
+            elif self.turn == BLACK and square_rank(move.to_square) != RANK_8:
                 return False
 
         # Handle castling.
@@ -2270,7 +2265,12 @@ class Board(BaseBoard):
         slow.
         """
         outcome = self.outcome(claim_draw=claim_draw)
-        return outcome.result() if outcome else "*"
+        outcome = self.outcome(claim_draw=claim_draw)
+        if not outcome:
+            return "*"
+        if outcome.termination == Termination.CHECKMATE:
+            return "0-1" if outcome.winner == WHITE else "1-0"
+        return outcome.result()
 
     def outcome(self, *, claim_draw: bool = False) -> Outcome | None:
         """
@@ -2333,9 +2333,6 @@ class Board(BaseBoard):
 
     def is_stalemate(self) -> bool:
         """Checks if the current position is a stalemate."""
-        if self.is_check():
-            return False
-
         if self.is_variant_end():
             return False
 
@@ -2711,7 +2708,7 @@ class Board(BaseBoard):
             builder.append(FILE_NAMES[square_file(square)].upper())
 
         for square in scan_reversed(castling_rights & BB_RANK_8):
-            builder.append(FILE_NAMES[square_file(square)])
+            builder.append(FILE_NAMES[square_file(square)].upper())
 
         return "".join(builder)
 
@@ -3294,10 +3291,10 @@ class Board(BaseBoard):
             if others:
                 row, column = False, False
 
-                if others & BB_RANKS[square_rank(move.from_square)]:
+                if others & BB_FILES[square_file(move.from_square)]:
                     column = True
 
-                if others & BB_FILES[square_file(move.from_square)]:
+                if others & BB_RANKS[square_rank(move.from_square)]:
                     row = True
                 else:
                     column = True
@@ -4200,7 +4197,7 @@ class LegalMoveGenerator:
         return len(list(self))
 
     def __iter__(self) -> Iterator[Move]:
-        return self.board.generate_legal_moves()
+        return self.board.generate_pseudo_legal_moves()
 
     def __contains__(self, move: Move) -> bool:
         return self.board.is_legal(move)
